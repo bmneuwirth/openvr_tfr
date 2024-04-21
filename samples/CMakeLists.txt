@@ -198,5 +198,6 @@ include_directories(
 ## SUBDIRECTORIES ##
 
 add_subdirectory(hellovr_opengl)
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT hellovr_opengl)
 
 # -----------------------------------------------------------------------------
