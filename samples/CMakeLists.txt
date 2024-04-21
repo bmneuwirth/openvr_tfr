@@ -148,23 +148,6 @@ else()
 endif()
 set(SDL2_INCLUDE_DIR ${THIRDPARTY_DIR}/sdl2-2.0.3/include)
 
-## Vulkan
-if(NOT (${CMAKE_SYSTEM_NAME} MATCHES "Darwin"))
-  find_library(VULKAN_LIBRARY
-      NAMES
-        vulkan-1
-        vulkan
-      PATHS
-        ${THIRDPARTY_DIR}/vulkan-1.0.49.0/lib
-      PATH_SUFFIXES
-        linux${PLATFORM}
-        ${WINDOWS_PATH_SUFFIXES}
-      NO_DEFAULT_PATH
-  )
-  set(VULKAN_INCLUDE_DIR ${THIRDPARTY_DIR}/vulkan-1.0.49.0/include)
-endif()
-
-
 ## Qt 5
 ## Important :
 ## Remember to set CMAKE_PREFIX_PATH to Qt5 cmake modules path for your targeted platform
@@ -210,10 +193,6 @@ include_directories(
   ${SDL2_INCLUDE_DIR}
   ${OPENVR_INCLUDE_DIR}
 )
-
-if(NOT (${CMAKE_SYSTEM_NAME} MATCHES "Darwin"))
-  include_directories(${VULKAN_INCLUDE_DIR})
-endif()
 
 # -----------------------------------------------------------------------------
 ## SUBDIRECTORIES ##

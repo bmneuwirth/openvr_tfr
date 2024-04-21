@@ -6,3 +6,4 @@ Build instructions (requires CMake):
 > cmake ..
 
 Open the generated openvr_samples.sln file in samples/build and run the project. 
+Functions of interest are RenderStereoTargets and RenderFrame
