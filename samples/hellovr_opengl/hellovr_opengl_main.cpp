@@ -97,7 +97,7 @@ public:
 	void SetupCompanionWindow();
 	void SetupCameras();
 
-	void RenderStereoTargets();
+	void RenderStereoTargets(bool leftFoveaOnly, bool rightFoveaOnly);
 	void RenderCompanionWindow();
 	void RenderScene( vr::Hmd_Eye nEye );
 
@@ -243,6 +243,10 @@ private: // OpenGL bookkeeping
 	vr::VRActionHandle_t m_actionAnalongInput = vr::k_ulInvalidActionHandle;
 
 	vr::VRActionSetHandle_t m_actionsetDemo = vr::k_ulInvalidActionSetHandle;
+
+private: // Custom TFR code
+	uint32_t m_nFrameCount;
+	uint32_t FOVEA_SIZE = 300; // Fovea size (FOVEA_SIZE*FOVEA_SIZE square of pixels) 
 };
 
 
@@ -364,6 +368,7 @@ CMainApplication::CMainApplication( int argc, char *argv[] )
 	, m_iSceneVolumeInit( 20 )
 	, m_strPoseClasses("")
 	, m_bShowCubes( true )
+	, m_nFrameCount(0)
 {
 
 	for( int i = 1; i < argc; i++ )
@@ -847,16 +852,28 @@ void CMainApplication::ProcessVREvent( const vr::VREvent_t & event )
 void CMainApplication::RenderFrame()
 {
 	// for now as fast as possible
-	if ( m_pHMD )
+	if (m_pHMD)
 	{
 		RenderControllerAxes();
-		RenderStereoTargets();
+		
+		int frameAmt = 4;
+		if (m_nFrameCount % frameAmt == 0 || m_nFrameCount % frameAmt == frameAmt / 2) {
+			RenderStereoTargets(false, false);
+		}
+		else if (m_nFrameCount % frameAmt < frameAmt / 2) {
+			RenderStereoTargets(true, false);
+		}
+		else {
+			RenderStereoTargets(false, true);
+		}
 		RenderCompanionWindow();
 
 		vr::Texture_t leftEyeTexture = {(void*)(uintptr_t)leftEyeDesc.m_nResolveTextureId, vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
 		vr::VRCompositor()->Submit(vr::Eye_Left, &leftEyeTexture );
 		vr::Texture_t rightEyeTexture = {(void*)(uintptr_t)rightEyeDesc.m_nResolveTextureId, vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
 		vr::VRCompositor()->Submit(vr::Eye_Right, &rightEyeTexture );
+
+		m_nFrameCount++;
 	}
 
 	if ( m_bVblank && m_bGlFinishHack )
@@ -1486,48 +1503,74 @@ void CMainApplication::SetupCompanionWindow()
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-void CMainApplication::RenderStereoTargets()
+void CMainApplication::RenderStereoTargets(bool leftFoveaOnly, bool rightFoveaOnly)
 {
 	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glEnable( GL_MULTISAMPLE );
 
 	// Left Eye
-	glBindFramebuffer( GL_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId );
- 	glViewport(0, 0, m_nRenderWidth, m_nRenderHeight );
- 	RenderScene( vr::Eye_Left );
- 	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-	
-	glDisable( GL_MULTISAMPLE );
-	 	
- 	glBindFramebuffer(GL_READ_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, leftEyeDesc.m_nResolveFramebufferId );
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
+		glViewport(0, 0, m_nRenderWidth, m_nRenderHeight);
+		RenderScene(vr::Eye_Left);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    glBlitFramebuffer( 0, 0, m_nRenderWidth, m_nRenderHeight, 0, 0, m_nRenderWidth, m_nRenderHeight, 
-		GL_COLOR_BUFFER_BIT,
- 		GL_LINEAR );
+		glDisable(GL_MULTISAMPLE);
 
- 	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0 );	
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, leftEyeDesc.m_nResolveFramebufferId);
 
-	glEnable( GL_MULTISAMPLE );
+		if (leftFoveaOnly) { // Fovea is always at center right now
+			int startX = m_nRenderWidth / 2 - FOVEA_SIZE;
+			int endX = m_nRenderWidth / 2 + FOVEA_SIZE;
+			int startY = m_nRenderHeight / 2 - FOVEA_SIZE;
+			int endY = m_nRenderHeight / 2 + FOVEA_SIZE;
+			glBlitFramebuffer(startX, startY, endX, endY, startX, startY, endX, endY,
+				GL_COLOR_BUFFER_BIT,
+				GL_LINEAR);
+		}
+		else {
+			glBlitFramebuffer(0, 0, m_nRenderWidth, m_nRenderHeight, 0, 0, m_nRenderWidth, m_nRenderHeight,
+				GL_COLOR_BUFFER_BIT,
+				GL_LINEAR);
+		}
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+		glEnable(GL_MULTISAMPLE);
+	}
 
 	// Right Eye
-	glBindFramebuffer( GL_FRAMEBUFFER, rightEyeDesc.m_nRenderFramebufferId );
- 	glViewport(0, 0, m_nRenderWidth, m_nRenderHeight );
- 	RenderScene( vr::Eye_Right );
- 	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
- 	
-	glDisable( GL_MULTISAMPLE );
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, rightEyeDesc.m_nRenderFramebufferId);
+		glViewport(0, 0, m_nRenderWidth, m_nRenderHeight);
+		RenderScene(vr::Eye_Right);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
- 	glBindFramebuffer(GL_READ_FRAMEBUFFER, rightEyeDesc.m_nRenderFramebufferId );
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, rightEyeDesc.m_nResolveFramebufferId );
-	
-    glBlitFramebuffer( 0, 0, m_nRenderWidth, m_nRenderHeight, 0, 0, m_nRenderWidth, m_nRenderHeight, 
-		GL_COLOR_BUFFER_BIT,
- 		GL_LINEAR  );
+		glDisable(GL_MULTISAMPLE);
 
- 	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0 );
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, rightEyeDesc.m_nRenderFramebufferId);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, rightEyeDesc.m_nResolveFramebufferId);
+
+		if (rightFoveaOnly) { // Fovea is always at center right now
+			int startX = m_nRenderWidth / 2 - FOVEA_SIZE;
+			int endX = m_nRenderWidth / 2 + FOVEA_SIZE;
+			int startY = m_nRenderHeight / 2 - FOVEA_SIZE;
+			int endY = m_nRenderHeight / 2 + FOVEA_SIZE;
+			glBlitFramebuffer(startX, startY, endX, endY, startX, startY, endX, endY,
+				GL_COLOR_BUFFER_BIT,
+				GL_LINEAR);
+		}
+		else {
+			glBlitFramebuffer(0, 0, m_nRenderWidth, m_nRenderHeight, 0, 0, m_nRenderWidth, m_nRenderHeight,
+				GL_COLOR_BUFFER_BIT,
+				GL_LINEAR);
+		}
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	}
 }
 
 
