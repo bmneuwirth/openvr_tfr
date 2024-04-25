@@ -7,6 +7,7 @@
 #include <Foundation/Foundation.h>
 #include <AppKit/AppKit.h>
 #include <OpenGL/glu.h>
+#include <opencv2/opencv.hpp>
 // Apple's version of glut.h #undef's APIENTRY, redefine it
 #define APIENTRY
 #else
@@ -1520,6 +1521,47 @@ void CMainApplication::RenderStereoTargets(bool leftFoveaOnly, bool rightFoveaOn
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, leftEyeDesc.m_nResolveFramebufferId);
 
+		int framebufferWidth = m_nRenderWidth;
+		int framebufferHeight = m_nRenderHeight;
+		std::vector<unsigned char> pixelData(framebufferWidth * framebufferHeight * 4);
+
+		// Bind the framebuffer for reading
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
+
+		// Read the pixel data from the framebuffer into the CPU memory buffer
+		glReadPixels(0, 0, framebufferWidth, framebufferHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixelData.data());
+
+		// Unbind the framebuffer
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+		for (int y = 0; y < framebufferHeight; ++y) {
+			for (int x = 0; x < framebufferWidth; ++x) {
+				// Calculate the index into the pixel data array
+				int index = (y * framebufferWidth + x) * 4;
+
+				// Access the RGBA components of the pixel
+				unsigned char r = pixelData[index];
+				unsigned char g = pixelData[index + 1];
+				unsigned char b = pixelData[index + 2];
+				unsigned char a = pixelData[index + 3];
+
+				// Example: Modify the color of each pixel (e.g., invert colors)
+				r = 255 - r;
+				g = 255 - g;
+				b = 255 - b;
+
+				// Write the modified color back to the pixel data
+				pixelData[index] = r;
+				pixelData[index + 1] = g;
+				pixelData[index + 2] = b;
+				// Alpha remains unchanged
+			}
+		}
+
+		cv::Mat frameBufferImage(framebufferHeight, framebufferWidth, CV_8UC4, pixelData.data());
+		cv::cvtColor(frameBufferImage, frameBufferImage, cv::COLOR_RGBA2BGRA);
+
+		
 		if (leftFoveaOnly) { // Fovea is always at center right now
 			int startX = m_nRenderWidth / 2 - FOVEA_SIZE;
 			int endX = m_nRenderWidth / 2 + FOVEA_SIZE;
