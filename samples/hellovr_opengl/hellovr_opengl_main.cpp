@@ -22,6 +22,8 @@
 #include "shared/lodepng.h"
 #include "shared/Matrices.h"
 #include "shared/pathtools.h"
+#include "../../headers/MotionVectorEstimation.h"
+#include "../../headers/Reprojection.h"
 
 #if defined(POSIX)
 #include "unistd.h"
@@ -1500,30 +1502,7 @@ void CMainApplication::SetupCompanionWindow()
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CMainApplication::RenderStereoTargets(bool leftFoveaOnly, bool rightFoveaOnly)
-{
-	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
-	glEnable( GL_MULTISAMPLE );
-
-	// Left Eye
-	{
-		glBindFramebuffer(GL_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
-		glViewport(0, 0, m_nRenderWidth, m_nRenderHeight);
-		RenderScene(vr::Eye_Left);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		glDisable(GL_MULTISAMPLE);
-
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, leftEyeDesc.m_nResolveFramebufferId);
-
-		int framebufferWidth = m_nRenderWidth;
-		int framebufferHeight = m_nRenderHeight;
-		std::vector<unsigned char> pixelData(framebufferWidth * framebufferHeight * 4);
+void frameModifier(int framebufferWidth, int framebufferHeight, std::vector<unsigned char> pixelData){
 
 		// Bind the framebuffer for reading
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
@@ -1561,6 +1540,45 @@ void CMainApplication::RenderStereoTargets(bool leftFoveaOnly, bool rightFoveaOn
 		cv::Mat frameBufferImage(framebufferHeight, framebufferWidth, CV_8UC4, pixelData.data());
 		cv::cvtColor(frameBufferImage, frameBufferImage, cv::COLOR_RGBA2BGRA);
 
+		cv::Mat grayImage;
+		cv::cvtColor(frameBufferImage, grayImage, cv::COLOR_BGRA2GRAY);
+
+		cv::Mat prevGray; // stored previous gray frame
+		MotionVectorEstimation mv;
+		auto motionVectors = mv.estimateMotionVectors(prevFrame, grayImage);
+
+		Reprojection rp;
+		auto reprojectedFrame = rp.reproject(frameBufferImage, motionVectors, 16);
+
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CMainApplication::RenderStereoTargets(bool leftFoveaOnly, bool rightFoveaOnly)
+{
+	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
+	glEnable( GL_MULTISAMPLE );
+
+	// Left Eye
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
+		glViewport(0, 0, m_nRenderWidth, m_nRenderHeight);
+		RenderScene(vr::Eye_Left);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		glDisable(GL_MULTISAMPLE);
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, leftEyeDesc.m_nRenderFramebufferId);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, leftEyeDesc.m_nResolveFramebufferId);
+
+		int framebufferWidth = m_nRenderWidth;
+		int framebufferHeight = m_nRenderHeight;
+		std::vector<unsigned char> pixelData(framebufferWidth * framebufferHeight * 4);
+
+		frameModifier(framebufferWidth, framebufferHeight, pixelData);
+		
 		
 		if (leftFoveaOnly) { // Fovea is always at center right now
 			int startX = m_nRenderWidth / 2 - FOVEA_SIZE;
@@ -1594,6 +1612,12 @@ void CMainApplication::RenderStereoTargets(bool leftFoveaOnly, bool rightFoveaOn
 
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, rightEyeDesc.m_nRenderFramebufferId);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, rightEyeDesc.m_nResolveFramebufferId);
+
+		int framebufferWidth = m_nRenderWidth;
+		int framebufferHeight = m_nRenderHeight;
+		std::vector<unsigned char> pixelData(framebufferWidth * framebufferHeight * 4);
+
+		frameModifier(framebufferWidth, framebufferHeight, pixelData);
 
 		if (rightFoveaOnly) { // Fovea is always at center right now
 			int startX = m_nRenderWidth / 2 - FOVEA_SIZE;
